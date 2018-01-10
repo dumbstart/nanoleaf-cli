@@ -1,13 +1,28 @@
 #!/usr/bin/env bash 
 
+set -o errexit
+set -o nounset
+# set -ex
+
+
 # Set Nanoleaf API settings
-URL="http://192.168.1.130"
+# URL="http://192.168.1.130"
 PORT="16021"
 KEY="YoeEPOckx1vbAWjpCk8Slzr8xwuUblU7"
-# URL=""
+URL=""
 # PORT=""
 # KEY=""
 
+function listEffect() {
+  LIST=""
+  declare -a LIST=($(getURL "/effects/effectsList" | sed -e "s/ /_/g" | tr ',' ' ' | tr -d '[' | tr -d ']'))
+  for OPTION in ${LIST[@]}; do
+    OPTION=$(echo $OPTION | tr "_" " ")
+    LIST=$(echo "$LIST,$OPTION")
+  done
+  LIST=$(echo "[$LIST]")
+  printf "%s" "$LIST"  
+}
 
 
 function setEffect() {
@@ -15,13 +30,9 @@ function setEffect() {
   for OPTION in ${LIST[@]}; do
     EFFECT=$(echo $OPTARG | tr -d '"'); ITEM=$(echo $OPTION | tr -d '"')
     if [[ "$ITEM" == "$EFFECT" ]]; then
-      echo "Match"
       EFFECT=$(echo $ITEM | tr "_" " " | awk '"{ print $0 }"')
-      echo "final: "$EFFECT
-      echo '"'$EFFECT'"'
       ITEM=$( echo $ITEM | tr "_" " ")
       DATA='{"select" : "'${ITEM}'"}'
-      echo $DATA
       curl -X PUT -s -d "$DATA" "$CURL/effects"
     fi
   done
@@ -53,53 +64,40 @@ function putURL() {
   curl -X PUT -s -d "$DATA" "$CURL$1"
 }
 
-if [ -z "$URL" ]; then
-  echo "Please enter the URL of your Nanoleaf lights."
-elif [ -z "$PORT" ]; then
-  echo "Please enter the port of your Nanoleaf lights, usually 16021."
-elif [ -z "$KEY" ]; then
-  echo "Please enter the key for your Nanoleaf lights."
-else
-  CURL=$URL":"$PORT"/api/v1/"$KEY
-  while getopts ":bplfeg:s:" FLAG
-  do
-    case "$FLAG" in
-          s)  # set off/on/fade in/fade out/brightness/effect
-              if [[ "$OPTARG" == "off" ]]; then putURL "/state" '"on"' '"value"' "false"; [[ $(getURL "/state/on" | cut -d':' -f 2 | cut -d'}' -f 1) == "false" ]] && echo "off" || echo "on"
-              elif [[ "$OPTARG" == "on" ]]; then putURL "/state" '"on"' '"value"' "true"; [[ $(getURL "/state/on" | cut -d':' -f 2 | cut -d'}' -f 1) == "false" ]] && echo "off" || echo "on"
-              elif [[ "$OPTARG" == "in" ]]; then fadeIn
-              elif [[ "$OPTARG" == "out" ]]; then fadeOut
-              elif [ "$OPTARG" -ge 0 ] 2>/dev/null; then putURL "/state/" '"brightness"' '"value"' "$OPTARG"; getURL "/state/brightness/value"
-              else setEffect; getURL "/effects/select" | tr -d '"';
-              fi;;
-          g)  #get power/brightness/effect
-              if [[ "$OPTARG" == "power" ]]; then [[ $(getURL "/state/on" | cut -d':' -f 2 | cut -d'}' -f 1) == "false" ]] && echo "off" || echo "on"
-              elif [[ "$OPTARG" == "brightness" ]]; then getURL "/state/brightness/value"
-              elif [[ "$OPTARG" == "effect" ]]; then getURL "/effects/select" | tr -d '"'
-              fi;;
-          b)  # getBrightness
-              getURL "/state/brightness/value";;
-          e)  # getCurrentEffect
-              getURL "/effects/select" | tr -d '"';;
-          f)  [[ $(getURL "/state/on" | cut -d':' -f 2 | cut -d'}' -f 1) == "false" ]] && fadeIn || fadeOut;;
-          l)  # getEffects
-              LIST=""
-              declare -a LIST=($(getURL "/effects/effectsList" | sed -e "s/ /_/g" | tr ',' ' ' | tr -d '[' | tr -d ']'))
-  #             declare -a LIST=($(getURL "/effects/effectsList" | tr ' ' '_' | tr ',' ' ' | tr -d '[' | tr -d ']' | tr -d '"'))
-              for OPTION in ${LIST[@]}; do
-                OPTION=$(echo $OPTION | tr "_" " ")
-                LIST=$(echo "$LIST,$OPTION")
-              done
-              LIST=$(echo "[$LIST]")
-              echo $LIST
-              echo;;
-          p)  # getPower
-              [[ $(getURL "/state/on" | cut -d':' -f 2 | cut -d'}' -f 1) == "false" ]] && echo "off" || echo "on";;
-          *)  echo $"Usage: $0 -s(et) -g(et) -f(ade) -b(rightness) -p(ower) -e(ffect) -l(ist)"; exit 1
-    esac
-  done
-  if [ -z "$name" ]
-  then
-     echo $"Usage: $0 -s(et) -g(et) -f(ade) -b(rightness) -p(ower) -e(ffect) -l(ist)"; exit 1
-  fi
-fi
+function showUsage() {
+  echo "Usage: $0 [-s off on in out # effect] [-g power brightness effect] [-f in out] [-b] [-p] [-e] [-l]"
+  exit 1
+}
+
+MESSAGE=""
+[ -z "$URL" ] && echo "Please enter the URL of your Nanoleaf lights."; showUsage
+[ -z "$PORT" ] && echo "Please enter the port of your Nanoleaf lights, usually 16021."; showUsage
+[ -z "$KEY" ] && echo "Please enter the key for your Nanoleaf lights."; showUsage
+[[ ! $@ =~ ^\-.+ ]] && showUsage
+
+CURL=$URL":"$PORT"/api/v1/"$KEY
+
+while getopts ":bplfeg:s:" FLAG
+do
+  case "$FLAG" in
+    s)  # set off/on/fade in/fade out/brightness/effect
+        if [[ "$OPTARG" == "off" ]]; then putURL "/state" '"on"' '"value"' "false"; [[ $(getURL "/state/on" | cut -d':' -f 2 | cut -d'}' -f 1) == "false" ]] && echo "off" || echo "on"
+        elif [[ "$OPTARG" == "on" ]]; then putURL "/state" '"on"' '"value"' "true"; [[ $(getURL "/state/on" | cut -d':' -f 2 | cut -d'}' -f 1) == "false" ]] && echo "off" || echo "on"
+        elif [[ "$OPTARG" == "in" ]]; then fadeIn
+        elif [[ "$OPTARG" == "out" ]]; then fadeOut
+        elif [ "$OPTARG" -ge 0 ] 2>/dev/null; then putURL "/state/" '"brightness"' '"value"' "$OPTARG"; getURL "/state/brightness/value"
+        else setEffect; getURL "/effects/select" | tr -d '"';
+        fi;;
+    g)  #get power/brightness/effect
+        if [[ "$OPTARG" == "power" ]]; then [[ $(getURL "/state/on" | cut -d':' -f 2 | cut -d'}' -f 1) == "false" ]] && echo "off" || echo "on"
+        elif [[ "$OPTARG" == "brightness" ]]; then getURL "/state/brightness/value"
+        elif [[ "$OPTARG" == "effect" ]]; then getURL "/effects/select" | tr -d '"'
+        fi;;
+    b)  getURL "/state/brightness/value";; # getBrightness
+    e)  getURL "/effects/select" | tr -d '"';; # getCurrentEffect
+    f)  [[ $(getURL "/state/on" | cut -d':' -f 2 | cut -d'}' -f 1) == "false" ]] && fadeIn || fadeOut;; #fadeIn or fadeOut based on power state
+    l)  listEffect;; # getEffects
+    p)  [[ $(getURL "/state/on" | cut -d':' -f 2 | cut -d'}' -f 1) == "false" ]] && echo "off" || echo "on";; # getPower
+    *)  showUsage
+  esac
+done
