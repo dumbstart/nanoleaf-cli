@@ -1,4 +1,4 @@
-# nanoleaf_cli
+# nanoleaf-cli
 
 A basic script to interface with your Aurora Nanoleaf lights. I made this to use with Home Assistant and Hassio to ensure I will always have access to my lights.
 
