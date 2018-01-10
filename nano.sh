@@ -6,12 +6,9 @@ set -o nounset
 
 
 # Set Nanoleaf API settings
-# URL="http://192.168.1.130"
-PORT="16021"
-KEY="YoeEPOckx1vbAWjpCk8Slzr8xwuUblU7"
 URL=""
-# PORT=""
-# KEY=""
+PORT=""
+KEY=""
 
 function listEffect() {
   LIST=""
