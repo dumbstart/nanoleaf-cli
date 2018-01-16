@@ -26,12 +26,6 @@ nano.sh [-s off on in out # effect] [-g power brightness effect] [-f in out] [-b
   
   * 'effect' return effect
 
--f(ade)
-
-  * 'in' fade in to 100% brightness
-  
-  * 'out' fade out to 0% brightness
-
 -b(rightness)
 
   * return brightness
