@@ -1,4 +1,4 @@
-# nanoleaf-cli
+## nanoleaf-cli
 
 A basic script to interface with your Aurora Nanoleaf lights. I made this to use with Home Assistant and Hassio to ensure I will always have access to my lights.
 
@@ -10,47 +10,45 @@ nano.sh [-s off on in out # effect] [-g power brightness effect] [-f in out] [-b
 
 -s(et):
 
-  'off' turn off
+  * 'off' turn off
+
+  * 'on' turn on
   
-  'on' turn on
+  * '##' set brightness
   
-  'in' fade in
-  
-  'out' fade out
-  
-  '##' set brightness
-  
-  'effect' set the theme
+  * 'effect' set the theme
 
 -g(et)
 
-  'power' return power state
+  * 'power' return power state
   
-  'brightness' return brightness
+  * 'brightness' return brightness
   
-  'effect' return effect
+  * 'effect' return effect
 
 -f(ade)
 
-  'in' fade in to 100% brightness
+  * 'in' fade in to 100% brightness
   
-  'out' fade out to 0% brightness
+  * 'out' fade out to 0% brightness
 
 -b(rightness)
 
-  return brightness
+  * return brightness
 
 -p(ower)
 
-  return power state
+  * return power state
 
 -e(ffect)
 
-  return current effect
+  * return current effect
 
 -l(ist)
 
-  return list of available effects
+  * return list of available effects
 
+-u(pdate)
 
-You will need to get the IP address, port number, and key before using this script.
+  * Updates the effects list in your Home Assistant and sets the current effect.
+
