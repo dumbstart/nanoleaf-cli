@@ -4,6 +4,8 @@ set -o errexit
 set -o nounset
 # set -ex
 
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+declare -a list
 
 # Set Nanoleaf API settings
 url=""
@@ -12,7 +14,6 @@ key=""
 hass_pass=""
 hass_url=""
 hass_entity=""
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 function getURL() {
   curl -X GET -s "$curl_nano$1"
@@ -24,33 +25,31 @@ function putURL() {
 }
 
 function show_effect() {
+#   echo "show_effect"
   if [[ $(getURL "/state/on") = *"false"* ]]; then
-    echo "Off"
+    echo "off"
   else
     current=$(getURL "/effects/select" | tr -d '"')
     hass_effects=$(curl -s -X GET -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" "$hass_url/api/states/$hass_entity" | `pwd`/JSON.sh -s -b)
     state=$(echo "$hass_effects" | egrep '\["state"\]' | cut -d '"' -f4)
-    if [ "$state" != "$current" ]; then
-      echo "$state"
-    else
-      echo "$current"
-    fi
+    [ "$state" != "$current" ] && echo "$state" || echo "$current"
   fi
 }
 
 function update_effects() {
+#   echo "update_effects"
   declare -a list=($(getURL "/effects/effectsList" )) # | tr ',' ' ' | tr -d '[' | tr -d ']'))
   printf -v effects "%s " "${list[@]}"
-  effects=$(echo "${effects::-2},"'"'"Off"'"'"]")
+  effects=$(echo "${effects::-2},"'"'"off"'"'"]")
   curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_entity"'","options":'"$effects"'}' "$hass_url/api/services/input_select/set_options" > /dev/null
   power=$(getURL "/state/on" | cut -d':' -f 2 | cut -d'}' -f 1)
-  [ "$power" = false ] && effect="Off" || effect=$(curl -X GET -s "${curl_nano}/effects/select" | awk '{ print $0 }')
+  [ "$power" = false ] && effect="off" || effect=$(curl -X GET -s "${curl_nano}/effects/select" | awk '{ print $0 }')
   effect=$(echo '"'${effect}'"')
   curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_entity"'","option":'"$effect"'}' "$hass_url/api/services/input_select/select_option" > /dev/null
 }
 
 function listEffect() {
-  list=""
+#   echo "listEffect"
   declare -a list=($(getURL "/effects/effectsList" | sed -e "s/ /_/g" | tr ',' ' ' | tr -d '[' | tr -d ']'))
   for option in "${list[@]}"; do
     option=$(echo $option | tr "_" " ")
@@ -62,38 +61,35 @@ function listEffect() {
 
 function setEffect() {
   effect=$(echo $OPTARG | tr -d '"')
-  echo "effect: $effect"
-  if [ "$effect" = "Off" ]; then
+  if [ "$effect" = "off" ]; then
     putURL "/state" '"on"' '"value"' "false"
   else
     declare -a list=($(getURL "/effects/effectsList" | tr ' ' '_' | tr ',' ' ' | tr -d '[' | tr -d ']' | tr -d '"'))
     for option in "${list[@]}"; do
       item=$(echo "$option" | tr -d '"')
-      if [[ "$item" == "$effect" ]]; then
-        echo "effect: $effect"                  
-        effect=$(echo "$item" | tr "_" " " | awk '"{ print $0 }"')
-        echo "effect: $effect"            
+      if [[ "$item" == "$effect" ]]; then               
+        effect=$(echo "$item" | tr "_" " " | awk '"{ print $0 }"')  
         item=$( echo '"'$item'"' | tr "_" " ")
-        echo "$item"
         data='{"select" : '"$item"'}'
-        echo "data: $data"            
-        echo "effect: $effect"            
         curl -X PUT -s -d "$data" "$curl_nano/effects"
-        echo "effect: $effect"    
       fi
     done
   fi
   hass_effects=$(curl -s -X GET -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" "$hass_url/api/states/$hass_entity" )
-  echo "$hass_effects"
-  if [[ "$hass_effects" = *"$effect"* ]]; then
-    echo "MATCH"
-    echo "effect: $effect"
-    curl -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_entity"'","option":"'"$effect"'"}' "$hass_url/api/services/input_select/select_option"
-    echo "results: $?"
-  else
-    update_effects
-  fi
+#   echo "$hass_effects"
+  [[ "$hass_effects" = *"$effect"* ]] && curl -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_entity"'","option":"'"$effect"'"}' "$hass_url/api/services/input_select/select_option" || update_effects
 }
+
+
+function set_brightness() {
+  putURL "/state/" '"brightness"' '"value"' "$brightness_value";
+  if [ "$brightness_value" -eq 0 ]; then
+    putURL "/state" '"on"' '"value"' "false"
+    curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_entity"'","option":"off"}' "$hass_url/api/services/input_select/select_option" > /dev/null
+  fi
+  curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_entity_brightness"'","value":'"$brightness_value"'}' "$hass_url/api/services/input_number/set_value" > /dev/null
+}
+
 
 function fadeIn() {
   min=$(getURL "/state/brightness/value")
@@ -118,23 +114,13 @@ function show_usage() {
   exit 1
 }
 
-if [ -z "$url" ]; then
-  echo "Please enter the URL of your Nanoleaf lights."
+if [ -z "$url" ] || [ -z "$port" ] || [ -z "$key" ]; then
+  echo "Please enter the your Nanoleaf Aurora light information."
   exit 11
-fi
-if [ -z "$port" ]; then
-  echo "Please enter the port of your Nanoleaf lights, usually 16021."
-  exit 12
-fi
-if [ -z "$key" ]; then
-  echo "Please enter the key for your Nanoleaf lights."
-  exit 13
-fi
-if [ -z "$hass_pass" ] || [ -z "$hass_entity" ] || [ -z "$hass_url" ]; then
-  echo "Please enter your Home Assistant information for your Nanoleaf lights."
+elif [ -z "$hass_pass" ] || [ -z "$hass_entity" ] || [ -z "$hass_url" ]; then
+  echo "Please enter your Home Assistant information for your Nanoleaf Aurora lights."
   exit 14
-fi
-if [[ ! $@ =~ ^\-.+ ]]; then
+elif [[ ! $@ =~ ^\-.+ ]]; then
   show_usage
   exit 15
 fi
@@ -143,16 +129,19 @@ fi
 if [ ! -f "$DIR/JSON.sh" ]; then
   read -n 1 -s -r -p "Downloading JSON.sh to $DIR...press any key to continue."
   curl -s -O https://raw.githubusercontent.com/dominictarr/JSON.sh/master/JSON.sh > /dev/null
-  echo
-  chmod +x $DIR'/JSON.sh'
+  if [ ! -f "$DIR/JSON.sh" ]; then
+    echo; echo "Unable to download JSON.sh, please download manually to your Home Assistant configuration folder."  
+  else
+    chmod +x $DIR'/JSON.sh'
+  fi
 fi
 
-
-
-declare -a list
 curl_nano=$url":"$port"/api/v1/"$key
+hass_update=True
+
 while getopts ":bplfueg:s:" flag
 do
+  echo "flag: $GETOPTS"
   case "$flag" in
     s)  
         # set off/on/fade in/fade out/brightness/effect
@@ -167,13 +156,15 @@ do
           then fadeIn
         elif [[ "$OPTARG" == "out" ]]; 
           then fadeOut
-        elif [ "$OPTARG" -ge 0 ] 2>/dev/null; then 
-          putURL "/state/" '"brightness"' '"value"' "$OPTARG"; getURL "/state/brightness/value"
+        elif [ "$OPTARG" -ge 0 ] 2>/dev/null; then
+          brightness_value=$OPTARG
+          set_brightness
         else
+          putURL "/state" '"on"' '"value"' "true"
           setEffect
           getURL "/effects/select" | tr -d '"';
         fi
-        echo
+        echo "hass_update: $hass_update"
         break;;
     g)  
         #get power/brightness/effect
