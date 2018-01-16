@@ -4,7 +4,8 @@ A basic script to interface with your Aurora Nanoleaf lights. I made this to use
 
 You will need to enter your Nanoleaf Aurora url, port and key before using. You will also need to enter your Home Assistant URL, password and entity_id for your input_select of Nanoleaf Aurora effects.
 
-Usage:
+Usage: 
+
 
 nano.sh [-s off on in out # effect] [-g power brightness effect] [-f in out] [-b] [-p] [-e] [-l]
 
