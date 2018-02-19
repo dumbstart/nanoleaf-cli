@@ -2,22 +2,25 @@
 
 ####  Manager your Nanoleaf Aurora light through the command line. Interfaces with your Home Assistant installation.
 ####  Please enter the following variables to connect to your Aurora light as well as your Home Assistant.
-####  Usage: $0 [-s off on in out # Effect Name"] [-g power brightness effect] [-b] [-p] [-e] [-l] [-u]
+####  Usage: $0 [-s off/on/#/"Effect Name"] [-b] [-p] [-e] [-l] [-u]
 ####  Written by Michael Burks, repo at https://github.com/dumbstart/nanoleaf-cli
 
 # Set Nanoleaf API settings
 readonly url=""
 readonly port=""
 readonly key=""
+readonly hass_url=""
 readonly hass_pass=""
 readonly hass_effect=""
 readonly hass_brightness=""
 
 get_list() {
   declare -a list
+  value_power=false
+  set_power
   list=($(curl -sS -X GET "$curl_nano/effects/effectsList" ))
   printf -v effects "%s " "${list[@]}"
-  effects=$(echo "${effects::-2},"'"'"Off"'"'"]")
+  effects=$(echo "["'"'"Off"'"'",${effects:1}")
   $update_hass && curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_effect"'","options":'"$effects"'}' "$hass_url/api/services/input_select/set_options" > /dev/null
   [[ $(curl -sS -X GET "$curl_nano/state/on" | cut -d ":" -f 2 | tr -d "}" ) == "false" ]] && return_value="Off" || return_value=$(curl -X GET -s "${curl_nano}/effects/select")
   $update_hass && curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_effect"'","option":'"$return_value"'}' "$hass_url/api/services/input_select/select_option" > /dev/null
@@ -39,9 +42,13 @@ get_brightness() {
 set_power() {
   data=$(printf '{"%s":{"%s":%s}}' 'on' 'value' "$value_power")
   curl -s -X PUT -d "$data" "http://192.168.1.130:16021/api/v1/YoeEPOckx1vbAWjpCk8Slzr8xwuUblU7/state"
-  [ "$value_power" = true ] && value_effect=$(curl -sS -X GET "$curl_nano/effects/select") || value_effect='off'
-  return_value=$([[ $(curl -sS -X GET "$curl_nano/state/on" | cut -d ":" -f 2 | tr -d "}" ) == "false" ]] && echo "off" || echo "on")
-  $update_hass && curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_effect"'","option":'$return_value'}' "$hass_url/api/services/input_select/select_option" > /dev/null
+  if [ "$value_power" = true ]; then
+    value_effect=$(curl -sS -X GET "$curl_nano/effects/select")
+  else
+    value_effect='Off'
+  fi
+  $update_hass && curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_effect"'","option":'$value_effect'}' "$hass_url/api/services/input_select/select_option" > /dev/null
+  return_value=$([[ $(curl -sS -X GET "$curl_nano/state/on" | cut -d ":" -f 2 | tr -d "}" ) == "false" ]] && echo "Off" || echo "On")
 }
 
 get_power() {
@@ -58,13 +65,16 @@ set_effect() {
     curl -s -X PUT -d "$data" "http://192.168.1.130:16021/api/v1/YoeEPOckx1vbAWjpCk8Slzr8xwuUblU7/effects"
     return_value=$(curl -sS -X GET "$curl_nano/effects/select")
     $update_hass && curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_effect"'","option":'"$return_value"'}' "$hass_url/api/services/input_select/select_option" > /dev/null
+  elif [ "$value_effect" == "Off" ]; then
+    value_power=false
+    set_power
   else
     return_value=$(printf "Effect \"%s\" not available" "$value_effect")
   fi
 }
 
 get_effect() {
-  return_value=$(curl -sS -X GET "$curl_nano/effects/select" | tr -d '"')
+  [[ $(curl -sS -X GET "$curl_nano/state/on" | cut -d ":" -f 2 | tr -d "}" ) == "false" ]] && return_value="Off" || return_value=$(curl -sS -X GET "$curl_nano/effects/select" | tr -d '"')
   $update_hass && curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_effect"'","option":'"$return_value"'}' "$hass_url/api/services/input_select/select_option" > /dev/null
 }
 
@@ -72,8 +82,6 @@ show_usage() {
   echo 'Usage: $0 [-s off on in out # "Effect Name"] [-g power brightness effect] [-b] [-p] [-e] [-l] [-u]'
   exit 1
 }
-
-
 
 # initial check for Nanoleaf API info and Home Assistant info
 if [ -z "$url" ] || [ -z "$port" ] || [ -z "$key" ]; then
@@ -93,9 +101,9 @@ fi
 while getopts ":bplues:" flag
 do
   case "$flag" in
-    s)  if [[ "$OPTARG" == "off" ]]; then
+    s)  if [ "$OPTARG" = "off" ]; then
           value_power=false; set_power
-        elif [[ "$OPTARG" == "on" ]]; then 
+        elif [ "$OPTARG" = "on" ]; then 
           value_power=true; set_power
         elif [ "$OPTARG" -ge 0 ] 2>/dev/null; then
           value_bright=$OPTARG; set_brightness
@@ -106,7 +114,10 @@ do
     b)  get_brightness; break;;
     e)  get_effect; break;;
     l)  get_list; break;;
-    u)  get_list; get_power; get_effect; get_brightness; return_value="Update complete"; break;;
+    u)  if [ $update_hass ]; then
+          get_power; get_list; get_brightness; return_value="Update complete"; 
+        fi
+        break;;
     p)  get_power; break;;
     *)  show_usage
   esac
