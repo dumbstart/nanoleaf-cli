@@ -49,10 +49,6 @@ nano.sh -s 70
 
 * Sets lights to 70% brightness
 
-nano.sh -s "Flames"
-
-* Activates Flames theme on your Nanoleaf Aurora lights
-
 nano.sh -u
 
 * Updates the effects list, brightness, current effect and power status in Home Assistant. This has no use if you are only managing it from the command line.
