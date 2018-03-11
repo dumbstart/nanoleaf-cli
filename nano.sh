@@ -5,6 +5,8 @@
 ####  Usage: $0 [-s off/on/#/"Effect Name"] [-b] [-p] [-e] [-l] [-u]
 ####  Written by Michael Burks, repo at https://github.com/dumbstart/nanoleaf-cli
 
+echo "test"
+
 # Set Nanoleaf API settings
 readonly url=""
 readonly port=""
