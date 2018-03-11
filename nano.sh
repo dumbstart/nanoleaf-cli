@@ -29,7 +29,7 @@ get_list() {
 
 set_brightness() {
   printf -v data '{"%s":{"%s":%d}}' 'brightness' 'value' "$value_bright"
-  curl -s -X PUT -d "$data" "http://192.168.1.130:16021/api/v1/YoeEPOckx1vbAWjpCk8Slzr8xwuUblU7/state"
+  curl -s -X PUT -d "$data" "$curl_nano/state"
   return_value=$(curl -sS -X GET "$curl_nano/state/brightness/value")
   $update_hass && curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_brightness"'","value":'"$return_value"'}' "$hass_url/api/services/input_number/set_value" > /dev/null
 }
@@ -41,7 +41,7 @@ get_brightness() {
 
 set_power() {
   printf -v data '{"%s":{"%s":%s}}' 'on' 'value' "$value_power"
-  curl -s -X PUT -d "$data" "http://192.168.1.130:16021/api/v1/YoeEPOckx1vbAWjpCk8Slzr8xwuUblU7/state"
+  curl -s -X PUT -d "$data" "$curl_nano/state"
   if [ "$value_power" = true ]; then
     value_effect=$(curl -sS -X GET "$curl_nano/effects/select")
   else
@@ -62,7 +62,7 @@ set_effect() {
   results=$(echo "$effects" | grep '"'"${value_effect}"'"' )
   if [ "$results" != "" ]; then
     printf -v data '{"%s":"%s"}' 'select' "$value_effect"
-    curl -s -X PUT -d "$data" "http://192.168.1.130:16021/api/v1/YoeEPOckx1vbAWjpCk8Slzr8xwuUblU7/effects"
+    curl -s -X PUT -d "$data" "$curl_nano/effects"
     return_value=$(curl -sS -X GET "$curl_nano/effects/select")
     $update_hass && curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_effect"'","option":'"$return_value"'}' "$hass_url/api/services/input_select/select_option" > /dev/null
   elif [ "$value_effect" == "Off" ]; then
@@ -79,7 +79,7 @@ get_effect() {
 }
 
 show_usage() {
-  echo 'Usage: $0 [-s off on in out # "Effect Name"] [-g power brightness effect] [-b] [-p] [-e] [-l] [-u]'
+  echo 'Usage: $0 [-s off on # "Effect Name"] [-b] [-p] [-e] [-l] [-u] [-h]'
   exit 1
 }
 
