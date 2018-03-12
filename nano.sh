@@ -13,80 +13,72 @@ readonly hass_url=""
 readonly hass_pass=""
 readonly hass_effect=""
 readonly hass_brightness=""
+# set -o errexit
+# set -o nounset
+# set -ex
 
 get_list() {
-  declare -a list
-  value_power=false
-  set_power
-  list=($(curl -sS -X GET "$curl_nano/effects/effectsList" ))
-  printf -v effects "%s " "${list[@]}"
-  effects=$(echo "["'"'"Off"'"'",${effects:1}")
+#   list=$(curl -sS -X GET "$curl_nano/effects/effectsList" | tr " " "_" | tr "," "\n" | tr -d '"' | tr -d '[' | tr -d ']')
+  effects=$(nano_get "effects/effectsList"); effects=$(echo "["'"'"Off"'"'",${effects:1}")
+  return_value=$(echo "$effects" | tr "," "\n" | tr -d "[" | tr -d "]")
   $update_hass && curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_effect"'","options":'"$effects"'}' "$hass_url/api/services/input_select/set_options" > /dev/null
-  [[ $(curl -sS -X GET "$curl_nano/state/on" | cut -d ":" -f 2 | tr -d "}" ) == "false" ]] && return_value="Off" || return_value=$(curl -X GET -s "${curl_nano}/effects/select")
-  $update_hass && curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_effect"'","option":'"$return_value"'}' "$hass_url/api/services/input_select/select_option" > /dev/null
-  return_value=$(echo "$effects" | tr ',' '\n' | tr -d '[' | tr -d ']' | tr -d '"')
+  current_effect=$(nano_send "select" "${value_effect}" "effects" "effects/select")
+  hass_send "option" "$current_effect"
 }
 
-set_brightness() {
-  printf -v data '{"%s":{"%s":%d}}' 'brightness' 'value' "$value_bright"
-  curl -s -X PUT -d "$data" "$curl_nano/state"
-  return_value=$(curl -sS -X GET "$curl_nano/state/brightness/value")
-  $update_hass && curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_brightness"'","value":'"$return_value"'}' "$hass_url/api/services/input_number/set_value" > /dev/null
+nano_send() {
+  [[ $2 =~ ^-?[0-9]+$ ]] || [[ "$1" = "on" ]] && curl -s -X PUT -d '{"'$1'": '$2'}' "$curl_nano/$3" || curl -s -X PUT -d '{"'$1'": "'"$2"'"}' "$curl_nano/$3"
+  [[ -n "$4" ]] && nano_get "$4"
 }
+
+nano_get() {
+  curl -sS -X GET "$curl_nano/$1"
+}
+
+hass_send() {
+  echo '{"entity_id": "'$hass_effect'", "'$1'": '"'"$2"'"'}' "$hass_url/api/services/input_select/select_option"  > /dev/null
+  $update_hass && [[ "$1" = "value" ]] && curl -sS -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" --data '{"entity_id": "'$hass_brightness'", "'$1'": '$2'}' "$hass_url/api/services/input_number/set_value"  > /dev/null
+  $update_hass && [[ "$1" = "option" ]] && curl -sS -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" --data '{"entity_id": "'$hass_effect'", "'$1'": '"$2"'}' "$hass_url/api/services/input_select/select_option"  > /dev/null
+}
+
+# set_brightness() {
+#   return_value=$(nano_send "brightness" "${value_bright}" "state" "state/brightness/value"); hass_send "value" "$return_value"
+# }
 
 get_brightness() {
-  return_value=$(curl -sS -X GET "$curl_nano/state/brightness/value")
-  $update_hass && curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_brightness"'","value":'"$return_value"'}' "$hass_url/api/services/input_number/set_value" > /dev/null
+  return_value=$(nano_get "state/brightness/value")
+  hass_send "value" "$return_value"
 }
 
 set_power() {
-  printf -v data '{"%s":{"%s":%s}}' 'on' 'value' "$value_power"
-  curl -s -X PUT -d "$data" "$curl_nano/state"
-  if [ "$value_power" = true ]; then
-    value_effect=$(curl -sS -X GET "$curl_nano/effects/select")
-  else
-    value_effect='Off'
-  fi
-  $update_hass && curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_effect"'","option":'$value_effect'}' "$hass_url/api/services/input_select/select_option" > /dev/null
-  return_value=$([[ $(curl -sS -X GET "$curl_nano/state/on" | cut -d ":" -f 2 | tr -d "}" ) == "false" ]] && echo "Off" || echo "On")
+  return_value=$(nano_send "on" "${value_power}" "state" "state/on")
+  [[ "$return_value" = *"true"* ]] && return_value="On" || return_value="Off"
+  send_effect=$([[ "$return_value" = "On" ]] && nano_get "effects/select" || echo '"Off"'); hass_send "option" "$send_effect"
 }
 
 get_power() {
-  [[ $(curl -sS -X GET "$curl_nano/state/on" | cut -d ":" -f 2 | tr -d "}" ) == "false" ]] && return_value="Off" || return_value=$(curl -sS -X GET "$curl_nano/effects/select" | tr -d '"')
-  $update_hass && curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_effect"'","option":'"$return_value"'}' "$hass_url/api/services/input_select/select_option" > /dev/null
-  [ "$return_value" != "Off" ] && return_value="On"
+  return_value=$([[ $(nano_get "state/on") = *"true"* ]] && echo "On" || echo "Off")
+  hass_send "option" $([[ "$return_value" = "On" ]] && nano_get "effects/select" || echo '"Off"')
 }
 
 set_effect() {
-  effects=$(curl -sS -X GET "$curl_nano/effects/effectsList" | tr -d '[' | tr -d ']' | tr ',' '\n')
-  results=$(echo "$effects" | grep '"'"${value_effect}"'"' )
-  if [ "$results" != "" ]; then
-    printf -v data '{"%s":"%s"}' 'select' "$value_effect"
-    curl -s -X PUT -d "$data" "$curl_nano/effects"
-    return_value=$(curl -sS -X GET "$curl_nano/effects/select")
-    $update_hass && curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_effect"'","option":'"$return_value"'}' "$hass_url/api/services/input_select/select_option" > /dev/null
-  elif [ "$value_effect" == "Off" ]; then
-    value_power=false
-    set_power
-  else
-    return_value=$(printf "Effect \"%s\" not available" "$value_effect")
-  fi
+  return_value=$(nano_send "select" "${value_effect}" "effects" "effects/select")
+  hass_send "option" "$return_value"
 }
 
 get_effect() {
-  [[ $(curl -sS -X GET "$curl_nano/state/on" | cut -d ":" -f 2 | tr -d "}" ) == "false" ]] && return_value="Off" || return_value=$(curl -sS -X GET "$curl_nano/effects/select" | tr -d '"')
-  $update_hass && curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_effect"'","option":'"$return_value"'}' "$hass_url/api/services/input_select/select_option" > /dev/null
+  return_value=$([[ $(nano_get "state/on") = *"true"* ]] && nano_get "effects/select" || echo "Off")
+  hass_send "option" "$return_value"
 }
 
 show_usage() {
-  echo 'Usage: $0 [-s off on # "Effect Name"] [-b] [-p] [-e] [-l] [-u] [-h]'
+  echo 'Usage: nano.sh [-s off on # "Effect Name"] [-b] [-p] [-e] [-l] [-u] [-h]'
   exit 1
 }
 
 # initial check for Nanoleaf API info and Home Assistant info
 if [ -z "$url" ] || [ -z "$port" ] || [ -z "$key" ]; then
-  echo "Please enter the your Nanoleaf Aurora light information and run this script again"
-  exit 1
+  echo "Please enter the your Nanoleaf Aurora light information and run this script again"; exit 1
 else
   curl_nano=$url":"$port"/api/v1/"$key
 fi
@@ -98,30 +90,45 @@ fi
 [[ ! $@ =~ ^\-.+ ]] && show_usage
 
 # find flag
-while getopts ":bplues:" flag
+while getopts ":bplues:a:" flag
 do
   case "$flag" in
-    s)  if [ "$OPTARG" = "off" ]; then
-          value_power=false; set_power
-        elif [ "$OPTARG" = "on" ]; then 
-          value_power=true; set_power
-        elif [ "$OPTARG" -ge 0 ] 2>/dev/null; then
-          value_bright=$OPTARG; set_brightness
-        else
-          value_effect="$OPTARG"; set_effect
+    a)  if [ -n "$2" ] && [ -n "$3" ]; then
+          return_value="Turn on $2 for $3 seconds"
+          curl -s -X PUT -d '{"write":{"command": "displayTemp", "duration": '$3', "animName": "'"$2"'" }}' http://192.168.1.130:16021/api/v1/caXt6k6iqjDaid5SIg216n2W1iZ2L0Qw/effects
         fi
-        break;;
-    b)  get_brightness; break;;
-    e)  get_effect; break;;
-    l)  get_list; break;;
+        ;;
+    s)  if [ "$OPTARG" = "off" ] || [ "$OPTARG" = "Off" ] || [ "$OPTARG" = "false" ]; then
+          return_value=$([[ $(nano_send "on" "false" "state" "state/on") = *"true"* ]] && echo "On" || echo "Off")
+          nano_current=$([[ "$return_value" = "On" ]] && nano_get "effects/select" || echo '"Off"'); hass_send "option" "$nano_current"
+        elif [ "$OPTARG" = "on" ] || [ "$OPTARG" = "true" ]; then 
+          return_value=$([[ $(nano_send "on" "true" "state" "state/on") = *"true"* ]] && echo "On" || echo "Off")
+          nano_current=$([[ "$return_value" = "On" ]] && nano_get "effects/select" || echo '"Off"'); hass_send "option" "$nano_current"
+        elif [ "$OPTARG" -ge 0 ] 2>/dev/null; then
+          return_value=$(nano_send "brightness" "${OPTARG}" "state" "state/brightness/value")
+          hass_send "value" "$return_value"
+        else
+          return_value=$(nano_send "select" "${OPTARG}" "effects" "effects/select"); hass_send "option" "$return_value"
+        fi
+        ;;
+    b)  return_value=$(nano_get "state/brightness/value")
+        hass_send "value" "$return_value"
+        ;;
+    e)  return_value=$([[ $(nano_get "state/on") = *"true"* ]] && nano_get "effects/select" || echo "Off")
+        hass_send "option" "$return_value"
+        ;;
+    l)  get_list;;
     u)  if [ $update_hass ]; then
           get_power; get_list; get_brightness; return_value="Update complete"; 
         fi
-        break;;
-    p)  get_power; break;;
+        ;;
+    p)  return_value=$([[ $(nano_get "state/on") = *"true"* ]] && echo "On" || echo "Off")
+        nano_current=$([[ "$return_value" = "On" ]] && nano_get "effects/select" || echo '"Off"'); hass_send "option" "$nano_current"
+        ;;
     *)  show_usage
   esac
 done
+shift $((OPTIND-1))
 # output of the results of the Nanoleaf request
 echo "$return_value"
 
