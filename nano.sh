@@ -19,7 +19,7 @@ readonly hass_brightness=""
 
 get_list() {
 #   list=$(curl -sS -X GET "$curl_nano/effects/effectsList" | tr " " "_" | tr "," "\n" | tr -d '"' | tr -d '[' | tr -d ']')
-  effects=$(nano_get "effects/effectsList"); effects=$(echo "["'"'"Off"'"'",${effects:1}")
+  effects=$(nano_get "effects/effectsList"); effects=$(echo "["'"'"Off"'"'","'"'"*Solid*"'"'","'"'"*Static*"'"'",${effects:1}")
   return_value=$(echo "$effects" | tr "," "\n" | tr -d "[" | tr -d "]")
   $update_hass && curl -s -X POST -H "Content-Type: application/json" -H "x-ha-access: $hass_pass" -d '{"entity_id":"'"$hass_effect"'","options":'"$effects"'}' "$hass_url/api/services/input_select/set_options" > /dev/null
   current_effect=$(nano_send "select" "${value_effect}" "effects" "effects/select")
@@ -95,7 +95,7 @@ do
   case "$flag" in
     a)  if [ -n "$2" ] && [ -n "$3" ]; then
           return_value="Turn on $2 for $3 seconds"
-          curl -s -X PUT -d '{"write":{"command": "displayTemp", "duration": '$3', "animName": "'"$2"'" }}' http://192.168.1.130:16021/api/v1/caXt6k6iqjDaid5SIg216n2W1iZ2L0Qw/effects
+          curl -s -X PUT -d '{"write":{"command": "displayTemp", "duration": '$3', "animName": "'"$2"'" }}' "$curl_nano/effects"
         fi
         ;;
     s)  if [ "$OPTARG" = "off" ] || [ "$OPTARG" = "Off" ] || [ "$OPTARG" = "false" ]; then
